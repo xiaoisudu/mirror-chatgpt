@@ -275,6 +275,11 @@ class RedisUtils:
         username = share_token if username is None or username == '' else username
         return username
 
+    def get_username_by_token(self, share_token: str):
+        username = self.hash_get("share_token_info:" + share_token, 'username') if share_token is not None else ''
+        username = share_token if username is None or username == '' else username
+        return username
+
     def close(self):
         """关闭 Redis 连接"""
         self.redis_client.close()

@@ -14,8 +14,10 @@ from app import app
 from chatgpt.authorization import verify_token
 from chatgpt.fp import get_fp
 from chatgpt.proofofWork import get_answer_token, get_config, get_requirements_token
+from gateway import common_utils
 from gateway.chatgpt import chatgpt_html
-from gateway.reverseProxy import chatgpt_reverse_proxy, content_generator, get_real_req_token, headers_reject_list
+from gateway.reverseProxy import chatgpt_reverse_proxy, content_generator, get_real_req_token, headers_reject_list, \
+    headers_accept_list
 from utils.Client import Client
 from utils.Logger import logger
 from utils.configs import x_sign, turnstile_solver_url, chatgpt_base_url_list, no_sentinel, sentinel_proxy_url_list, \
@@ -53,6 +55,7 @@ async def check_account(request: Request):
     # return check_account_info
     return check_account_response
 
+
 @app.post("/backend-api/gizmos/snorlax/upsert")
 async def get_gizmos_upsert(request: Request):
     response = await chatgpt_reverse_proxy(request, "backend-api/gizmos/snorlax/upsert")
@@ -62,6 +65,7 @@ async def get_gizmos_upsert(request: Request):
         username = redis_utils.get_username(request)
         redis_utils.set_add("user_gizmo_project:" + username, gizmo_id)
     return response
+
 
 @app.get("/backend-api/gizmos/snorlax/sidebar")
 async def get_gizmos_sidebar(request: Request):
@@ -78,6 +82,7 @@ async def get_gizmos_sidebar(request: Request):
             status_code=200
         )
     return response
+
 
 @app.get("/backend-api/gizmos/bootstrap")
 async def get_gizmos_bootstrap(request: Request):
@@ -106,19 +111,38 @@ async def get_gizmos_discovery_recent(request: Request):
     return await chatgpt_reverse_proxy(request, "public-api/gizmos/discovery/recent")
 
 
+@app.get("/backend-api/subscriptions")
+async def post_subscriptions(request: Request):
+    return {
+        "id": str(uuid.uuid4()),
+        "plan_type": "pro",
+        "seats_in_use": 1,
+        "seats_entitled": 1,
+        "active_until": "2050-01-01T00:00:00Z",
+        "billing_period": None,
+        "will_renew": True,
+        "non_profit_org_discount_applied": None,
+        "billing_currency": "USD",
+        "is_delinquent": False,
+        "became_delinquent_timestamp": None,
+        "grace_period_end_timestamp": None
+    }
+
+
 @app.api_route("/backend-api/conversations", methods=["GET", "PATCH"])
 async def get_conversations(request: Request):
-    share_token = request.cookies.get("share_token", "")
+    share_token = common_utils.get_share_token(request)
     # conversation_details_response转成json
     conversation_list = await chatgpt_reverse_proxy(request, "backend-api/conversations")
     conversation_list_str = conversation_list.body.decode('utf-8')
+    logger.info(conversation_list_str)
     conversation_list_json = json.loads(conversation_list_str)
 
     # 获取当前用户
     username = redis_utils.get_username(request)
     conversation_isolation = redis_utils.hash_get("share_token_info:" + share_token, 'conversation_isolation')
 
-    if conversation_isolation is not None and not is_true(conversation_isolation):
+    if conversation_isolation is not None and not is_true(str(conversation_isolation)):
         return Response(
             content=json.dumps(conversation_list_json),
             media_type="application/json"
@@ -133,10 +157,12 @@ async def get_conversations(request: Request):
     for conversation_id in conversations:
         conversation_map[conversation_id] = conversation_id
 
-    for item in conversation_list_json['items']:
-        if conversation_map.get(item['id']) is None:
-            item['title'] = '🔒'
-
+    items = conversation_list_json['items']
+    final_data = [item for item in items if conversation_map.get(item['id']) is not None]
+    # if conversation_map.get(item['id']) is None:
+    #     conversation_list_json
+    #     item['title'] = '🔒'
+    conversation_list_json['items'] = final_data
     return Response(
         content=json.dumps(conversation_list_json),
         media_type="application/json"
@@ -145,7 +171,7 @@ async def get_conversations(request: Request):
 
 @app.get("/backend-api/conversation/{conversation_id}")
 async def update_conversation(request: Request, conversation_id: str):
-    share_token = request.cookies.get("share_token", "")
+    share_token = common_utils.get_share_token(request)
     conversation_isolation = redis_utils.hash_get("share_token_info:" + share_token, 'conversation_isolation')
     if conversation_isolation is not None and is_true(conversation_isolation):
         # 获取当前用户
@@ -163,8 +189,7 @@ async def update_conversation(request: Request, conversation_id: str):
 
 @app.patch("/backend-api/conversation/{conversation_id}")
 async def patch_conversation(request: Request, conversation_id: str):
-    share_token = request.cookies.get("share_token", "")
-
+    share_token = common_utils.get_share_token(request)
     conversation_isolation = redis_utils.hash_get("share_token_info:" + share_token, 'conversation_isolation')
     if conversation_isolation is not None and is_true(conversation_isolation):
         # 获取当前用户
@@ -181,7 +206,7 @@ async def patch_conversation(request: Request, conversation_id: str):
 @app.get("/backend-api/me")
 async def get_me(request: Request):
     share_token = request.cookies.get("share_token", "")
-    token = redis_utils.hash_get('share_token_info:' + share_token, 'access_token')
+    token = common_utils.get_access_token(share_token)
     conversation_isolation = redis_utils.hash_get("share_token_info:" + share_token,
                                                   'conversation_isolation') if share_token is not None else ''
 
@@ -240,8 +265,83 @@ async def edge():
 
 
 if no_sentinel:
+    openai_sentinel_tokens_cache = {}
+
+
     @app.post("/backend-api/sentinel/chat-requirements")
-    async def sentinel_chat_conversations():
+    async def sentinel_chat_conversations(request: Request):
+        share_token = request.cookies.get("share_token", "")
+        access_token = common_utils.get_access_token(share_token)
+        fp = get_fp(access_token).copy()
+        proxy = common_utils.get_user_proxy(share_token)
+        proxy_url = proxy if proxy is not None else fp.pop("proxy_url", None)
+        fp.pop("proxy_url", None)
+        impersonate = fp.pop("impersonate", "safari15_3")
+        user_agent = fp.get("user-agent",
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0")
+
+        host_url = random.choice(chatgpt_base_url_list) if chatgpt_base_url_list else "https://chatgpt.com"
+        proof_token = None
+        turnstile_token = None
+
+        # headers = {
+        #     key: value for key, value in request.headers.items()
+        #     if (key.lower() not in ["host", "origin", "referer", "priority", "sec-ch-ua-platform", "sec-ch-ua",
+        #                             "sec-ch-ua-mobile", "oai-device-id"] and key.lower() not in headers_reject_list)
+        # }
+        headers = {
+            key: value for key, value in request.headers.items()
+            if (key.lower() in headers_accept_list)
+        }
+        headers.update(fp)
+        headers.update({"authorization": f"Bearer {access_token}"})
+        client = Client(proxy=proxy_url, impersonate=impersonate)
+        if sentinel_proxy_url_list:
+            clients = Client(proxy=random.choice(sentinel_proxy_url_list), impersonate=impersonate)
+        else:
+            clients = client
+
+        try:
+            config = get_config(user_agent)
+            p = get_requirements_token(config)
+            data = {'p': p}
+            r = await clients.post(f'{host_url}/backend-api/sentinel/chat-requirements', headers=headers, json=data,
+                                   timeout=10)
+            if r.status_code != 200:
+                raise HTTPException(status_code=r.status_code, detail="Failed to get chat requirements")
+            resp = r.json()
+            turnstile = resp.get('turnstile', {})
+            turnstile_required = turnstile.get('required')
+            if turnstile_required:
+                turnstile_dx = turnstile.get("dx")
+                try:
+                    if turnstile_solver_url:
+                        res = await client.post(turnstile_solver_url,
+                                                json={"url": "https://chatgpt.com", "p": p, "dx": turnstile_dx})
+                        turnstile_token = res.json().get("t")
+                except Exception as e:
+                    logger.info(f"Turnstile ignored: {e}")
+
+            proofofwork = resp.get('proofofwork', {})
+            proofofwork_required = proofofwork.get('required')
+            if proofofwork_required:
+                proofofwork_diff = proofofwork.get("difficulty")
+                proofofwork_seed = proofofwork.get("seed")
+                proof_token, solved = await run_in_threadpool(
+                    get_answer_token, proofofwork_seed, proofofwork_diff, config
+                )
+                if not solved:
+                    raise HTTPException(status_code=403, detail="Failed to solve proof of work")
+            chat_token = resp.get('token')
+
+            openai_sentinel_tokens_cache[access_token] = {
+                "chat_token": chat_token,
+                "proof_token": proof_token,
+                "turnstile_token": turnstile_token
+            }
+        except Exception as e:
+            logger.error(f"Sentinel failed: {e}")
+
         return {
             "arkose": {
                 "dx": None,
@@ -261,13 +361,17 @@ if no_sentinel:
         }
 
 
+    @app.post("/backend-alt/conversation")
     @app.post("/backend-api/conversation")
     async def chat_conversations(request: Request):
-        token = redis_utils.hash_get('share_token_info:' + request.cookies.get("share_token", ""), 'access_token')
+        share_token = request.cookies.get("share_token", "")
+        token = common_utils.get_access_token(share_token)
         req_token = await get_real_req_token(token)
         access_token = await verify_token(req_token)
         fp = get_fp(req_token).copy()
-        proxy_url = fp.pop("proxy_url", None)
+        proxy = common_utils.get_user_proxy(share_token)
+        proxy_url = proxy if proxy is not None else fp.pop("proxy_url", None)
+        fp.pop("proxy_url", None)
         impersonate = fp.pop("impersonate", "safari15_3")
         user_agent = fp.get("user-agent",
                             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0")
@@ -276,54 +380,71 @@ if no_sentinel:
         proof_token = None
         turnstile_token = None
 
+        # headers = {
+        #     key: value for key, value in request.headers.items()
+        #     if (key.lower() not in ["host", "origin", "referer", "priority", "sec-ch-ua-platform", "sec-ch-ua",
+        #                             "sec-ch-ua-mobile", "oai-device-id"] and key.lower() not in headers_reject_list)
+        # }
         headers = {
             key: value for key, value in request.headers.items()
-            if (key.lower() not in ["host", "origin", "referer", "priority", "sec-ch-ua-platform", "sec-ch-ua",
-                                    "sec-ch-ua-mobile", "oai-device-id"] and key.lower() not in headers_reject_list)
+            if (key.lower() in headers_accept_list)
         }
         headers.update(fp)
         headers.update({"authorization": f"Bearer {access_token}"})
 
-        client = Client(proxy=proxy_url, impersonate=impersonate)
-        if sentinel_proxy_url_list:
-            clients = Client(proxy=random.choice(sentinel_proxy_url_list), impersonate=impersonate)
-        else:
-            clients = client
+        try:
+            client = Client(proxy=proxy_url, impersonate=impersonate)
+            if sentinel_proxy_url_list:
+                clients = Client(proxy=random.choice(sentinel_proxy_url_list), impersonate=impersonate)
+            else:
+                clients = client
 
-        config = get_config(user_agent)
-        p = get_requirements_token(config)
-        data = {'p': p}
-        r = await clients.post(f'{host_url}/backend-api/sentinel/chat-requirements', headers=headers, json=data,
-                               timeout=10)
-        resp = r.json()
-        turnstile = resp.get('turnstile', {})
-        turnstile_required = turnstile.get('required')
-        if turnstile_required:
-            turnstile_dx = turnstile.get("dx")
-            try:
-                if turnstile_solver_url:
-                    res = await client.post(turnstile_solver_url,
-                                            json={"url": "https://chatgpt.com", "p": p, "dx": turnstile_dx})
-                    turnstile_token = res.json().get("t")
-            except Exception as e:
-                logger.info(f"Turnstile ignored: {e}")
+            sentinel_tokens = openai_sentinel_tokens_cache.get(req_token, {})
+            openai_sentinel_tokens_cache.pop(req_token, None)
+            if not sentinel_tokens:
+                config = get_config(user_agent)
+                p = get_requirements_token(config)
+                data = {'p': p}
+                r = await clients.post(f'{host_url}/backend-api/sentinel/chat-requirements', headers=headers, json=data,
+                                       timeout=10)
+                resp = r.json()
+                turnstile = resp.get('turnstile', {})
+                turnstile_required = turnstile.get('required')
+                if turnstile_required:
+                    turnstile_dx = turnstile.get("dx")
+                    try:
+                        if turnstile_solver_url:
+                            res = await client.post(turnstile_solver_url,
+                                                    json={"url": "https://chatgpt.com", "p": p, "dx": turnstile_dx})
+                            turnstile_token = res.json().get("t")
+                    except Exception as e:
+                        logger.info(f"Turnstile ignored: {e}")
 
-        proofofwork = resp.get('proofofwork', {})
-        proofofwork_required = proofofwork.get('required')
-        if proofofwork_required:
-            proofofwork_diff = proofofwork.get("difficulty")
-            proofofwork_seed = proofofwork.get("seed")
-            proof_token, solved = await run_in_threadpool(
-                get_answer_token, proofofwork_seed, proofofwork_diff, config
-            )
-            if not solved:
-                raise HTTPException(status_code=403, detail="Failed to solve proof of work")
-        chat_token = resp.get('token')
-        headers.update({
-            "openai-sentinel-chat-requirements-token": chat_token,
-            "openai-sentinel-proof-token": proof_token,
-            "openai-sentinel-turnstile-token": turnstile_token,
-        })
+                proofofwork = resp.get('proofofwork', {})
+                proofofwork_required = proofofwork.get('required')
+                if proofofwork_required:
+                    proofofwork_diff = proofofwork.get("difficulty")
+                    proofofwork_seed = proofofwork.get("seed")
+                    proof_token, solved = await run_in_threadpool(
+                        get_answer_token, proofofwork_seed, proofofwork_diff, config
+                    )
+                    if not solved:
+                        raise HTTPException(status_code=403, detail="Failed to solve proof of work")
+                chat_token = resp.get('token')
+                headers.update({
+                    "openai-sentinel-chat-requirements-token": chat_token,
+                    "openai-sentinel-proof-token": proof_token,
+                    "openai-sentinel-turnstile-token": turnstile_token,
+                })
+            else:
+                headers.update({
+                    "openai-sentinel-chat-requirements-token": sentinel_tokens.get("chat_token", ""),
+                    "openai-sentinel-proof-token": sentinel_tokens.get("proof_token", ""),
+                    "openai-sentinel-turnstile-token": sentinel_tokens.get("turnstile_token", "")
+                })
+        except Exception as e:
+            logger.error(f"Sentinel failed: {e}")
+            return Response(status_code=403, content="Sentinel failed")
 
         params = dict(request.query_params)
         data = await request.body()
@@ -350,7 +471,7 @@ if no_sentinel:
             data = json.dumps(req_json).encode("utf-8")
 
         background = BackgroundTask(c_close, client, clients)
-        r = await client.post_stream(f"{host_url}/backend-api/conversation", params=params, headers=headers,
+        r = await client.post_stream(f"{host_url}{request.url.path}", params=params, headers=headers,
                                      cookies=request_cookies, data=data, stream=True, allow_redirects=False)
         rheaders = r.headers
         logger.info(f"Request token: {req_token}")
@@ -361,13 +482,14 @@ if no_sentinel:
             rheaders.update({"x-sign": x_sign})
         if 'stream' in rheaders.get("content-type", ""):
             conv_key = r.cookies.get("conv_key", "")
-            response = StreamingResponse(content_generator(r, token, history), headers=rheaders,
+            response = StreamingResponse(content_generator(r, share_token, history), headers=rheaders,
                                          media_type=r.headers.get("content-type", ""), background=background)
             response.set_cookie("conv_key", value=conv_key)
             return response
         else:
             return Response(content=(await r.atext()), headers=rheaders, media_type=rheaders.get("content-type"),
                             status_code=r.status_code, background=background)
+
 
 @app.get("/api/usage")
 async def get_usage(share_token: str):
@@ -376,33 +498,33 @@ async def get_usage(share_token: str):
         # 从redis获取用户名
         name_from_redis = redis_utils.hash_get('share_token_info:' + share_token, 'username')
         username = share_token if name_from_redis is None else name_from_redis
-        
+
         # 获取该用户的所有模型使用量
         usage = redis_utils.hash_get("usage:" + username)
-        
+
         # 如果没有使用记录则返回空字典
         if not usage:
             usage = {}
-            
+
         return {
             "status": True,
             "message": "Success",
             "data": usage
         }
-        
+
     except Exception as e:
         return {
-            "status": False, 
+            "status": False,
             "message": str(e),
             "data": None
         }
 
 
-
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"])
 async def reverse_proxy(request: Request, path: str):
-    token = redis_utils.hash_get('share_token_info:' + request.cookies.get("share_token", ""), 'access_token')
-    if not token.startswith("eyJhbGciOi"):
+    share_token = common_utils.get_share_token(request)
+    access_token = common_utils.get_access_token(share_token)
+    if access_token is None or not access_token.startswith("eyJhbGciOi"):
         for banned_path in banned_paths:
             if re.match(banned_path, path):
                 raise HTTPException(status_code=403, detail="Forbidden")

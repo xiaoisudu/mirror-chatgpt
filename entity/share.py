@@ -22,6 +22,8 @@ class Share:
     # 对话隔离
     conversation_isolation: int = 1
 
+    proxy_url: str = field(default=None)
+
     gpt_limit_enable: int = 0
 
     gpt_reset_every_day: int = 1

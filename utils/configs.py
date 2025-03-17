@@ -75,6 +75,9 @@ auto_seed = is_true(os.getenv('AUTO_SEED', True))
 force_no_history = is_true(os.getenv('FORCE_NO_HISTORY', False))
 no_sentinel = is_true(os.getenv('NO_SENTINEL', False))
 
+with open('version.txt') as f:
+    version = f.read().strip()
+
 logger.info("-" * 60)
 logger.info(f"Chat2Api v0.0.1 | https://github.com/Kylsky")
 logger.info("-" * 60)

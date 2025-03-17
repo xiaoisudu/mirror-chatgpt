@@ -64,6 +64,63 @@ async def get_seedtoken(request: Request, credentials: HTTPAuthorizationCredenti
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+@app.post("/seedtoken")
+async def set_seedtoken(request: Request, credentials: HTTPAuthorizationCredentials = Security(security_scheme)):
+    verify_authorization(credentials.credentials)
+    data = await request.json()
+
+    seed = data.get("seed")
+    token = data.get("token")
+
+    if seed not in globals.seed_map:
+        globals.seed_map[seed] = {
+            "token": token,
+            "conversations": []
+        }
+    else:
+        globals.seed_map[seed]["token"] = token
+
+    with open(globals.SEED_MAP_FILE, "w", encoding="utf-8") as f:
+        json.dump(globals.seed_map, f, indent=4)
+
+    return {"status": "success", "message": "Token updated successfully"}
+
+
+@app.delete("/seedtoken")
+async def delete_seedtoken(request: Request, credentials: HTTPAuthorizationCredentials = Security(security_scheme)):
+    verify_authorization(credentials.credentials)
+
+    try:
+        data = await request.json()
+        seed = data.get("seed")
+
+        if seed == "clear":
+            globals.seed_map.clear()
+            with open(globals.SEED_MAP_FILE, "w", encoding="utf-8") as f:
+                json.dump(globals.seed_map, f, indent=4)
+            return {"status": "success", "message": "All seeds deleted successfully"}
+
+        if not seed:
+            raise HTTPException(status_code=400, detail="Missing required field: seed")
+
+        if seed not in globals.seed_map:
+            raise HTTPException(status_code=404, detail=f"Seed '{seed}' not found")
+        del globals.seed_map[seed]
+
+        with open(globals.SEED_MAP_FILE, "w", encoding="utf-8") as f:
+            json.dump(globals.seed_map, f, indent=4)
+
+        return {
+            "status": "success",
+            "message": f"Seed '{seed}' deleted successfully"
+        }
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON data")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
 async def chatgpt_account_check(access_token):
     auth_info = {}
     client = Client(proxy=random.choice(proxy_url_list) if proxy_url_list else None)
@@ -156,9 +213,23 @@ async def refresh(request: Request):
 
     auth_info.update(form_data)
 
+    access_token = auth_info.get("access_token", auth_info.get("accessToken", ""))
     refresh_token = auth_info.get("refresh_token", "")
 
-    if refresh_token:
+    if not refresh_token and not access_token:
+        raise HTTPException(status_code=401, detail="refresh_token or access_token is required")
+
+    need_refresh = True
+    if access_token:
+        try:
+            access_token_info = jwt.decode(access_token, options={"verify_signature": False})
+            exp = access_token_info.get("exp", 0)
+            if exp > int(time.time()) + 60 * 60 * 24 * 5:
+                need_refresh = False
+        except Exception as e:
+            logger.error(f"access_token: {e}")
+
+    if refresh_token and need_refresh:
         chatgpt_refresh_info = await chatgpt_refresh(refresh_token)
         if chatgpt_refresh_info:
             auth_info.update(chatgpt_refresh_info)
@@ -168,6 +239,12 @@ async def refresh(request: Request):
                 auth_info.update(account_check_info)
                 auth_info.update({"accessToken": access_token})
                 return Response(content=json.dumps(auth_info), media_type="application/json")
+    elif access_token:
+        account_check_info = await chatgpt_account_check(access_token)
+        if account_check_info:
+            auth_info.update(account_check_info)
+            auth_info.update({"accessToken": access_token})
+            return Response(content=json.dumps(auth_info), media_type="application/json")
 
     raise HTTPException(status_code=401, detail="Unauthorized")
 
