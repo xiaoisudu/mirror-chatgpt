@@ -79,7 +79,7 @@ with open('version.txt') as f:
     version = f.read().strip()
 
 logger.info("-" * 60)
-logger.info(f"Chat2Api v0.0.1 | https://github.com/Kylsky")
+logger.info(f"Chat2Api v0.0.1 | https://github.com/Kylsky/mirror-chatgpt")
 logger.info("-" * 60)
 logger.info("Environment variables:")
 logger.info("------------------------- Security -------------------------")
