@@ -7,6 +7,9 @@ from app import app
 from gateway.reverseProxy import chatgpt_reverse_proxy
 from utils.kv_utils import set_value_for_key_dict
 
+with open("templates/initialize.json", "r") as f:
+    initialize_json = json.load(f)
+
 
 @app.post("/v1/initialize")
 async def initialize(request: Request):
@@ -35,3 +38,8 @@ async def ces_v1_projects_oai_settings():
 @app.post("/ces/v1/{path:path}")
 async def ces_v1():
     return Response(status_code=202, content=json.dumps({"success": True}, indent=4), media_type="application/json")
+
+
+@app.post("/ces/statsc/flush")
+async def ces_v1():
+    return Response(status_code=200, content=json.dumps({"success": True}, indent=4), media_type="application/json")

@@ -24,6 +24,41 @@ class RedisUtils:
             decode_responses=decode_responses
         )
 
+    # expire 方法
+    def expire(self, key: str, seconds: int) -> bool:
+        """
+        设置键的过期时间
+
+        Args:
+            key: 键名
+            seconds: 过期时间（秒）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            return self.redis_client.expire(key, seconds)
+        except Exception as e:
+            print(f"Error setting expiration: {str(e)}")
+            return False
+
+    # exists 方法
+    def exists(self, key: str) -> bool:
+        """
+        检查键是否存在
+
+        Args:
+            key: 键名
+
+        Returns:
+            bool: 键是否存在
+        """
+        try:
+            return self.redis_client.exists(key) > 0
+        except Exception as e:
+            print(f"Error checking existence of key: {str(e)}")
+            return False
+
     def set_value(self, key: str, value: Any, expire_seconds: Optional[int] = None) -> bool:
         """
         设置键值对，支持自动序列化
@@ -289,3 +324,48 @@ class RedisUtils:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
+
+    def set_nx(self, key: str, value: Any, expire_seconds: Optional[int] = None) -> bool:
+        """
+        如果键不存在则设置键值对(SET if Not eXists)
+
+        Args:
+            key: 键名
+            value: 值（支持各种数据类型）
+            expire_seconds: 过期时间（秒）
+
+        Returns:
+            bool: 是否设置成功
+        """
+        try:
+            # 如果是复杂数据类型,转换为 JSON
+            if not isinstance(value, (str, int, float, bool)):
+                value = json.dumps(value)
+                
+            # 使用 setnx 命令设置值
+            success = self.redis_client.setnx(key, value)
+            
+            # 如果设置成功且指定了过期时间
+            if success and expire_seconds:
+                self.redis_client.expire(key, expire_seconds)
+                
+            return success
+        except Exception as e:
+            print(f"Error setting nx value: {str(e)}")
+            return False
+
+    def delete(self, key: str) -> bool:
+        """
+        删除指定的键
+
+        Args:
+            key: 要删除的键名
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            return bool(self.redis_client.delete(key))
+        except Exception as e:
+            print(f"Error deleting key: {str(e)}")
+            return False

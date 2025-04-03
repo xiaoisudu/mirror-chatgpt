@@ -11,5 +11,6 @@ jinja2
 APScheduler
 ua-generator
 pyjwt
+diskcache
 redis==5.0.1
 hiredis

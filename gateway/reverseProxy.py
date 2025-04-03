@@ -1,15 +1,17 @@
+import hashlib
 import json
 import random
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
+import asyncio
 
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from starlette.background import BackgroundTask
 
 import utils.globals as globals
-from chatgpt.authorization import verify_token, get_req_token
+from chatgpt.authorization import get_req_token
 from chatgpt.fp import get_fp
 from gateway import common_utils
 from utils.Client import Client
@@ -187,10 +189,180 @@ async def content_generator(r, share_token, history=True, request: Request = Non
         yield chunk
 
 
-async def chatgpt_reverse_proxy(request: Request, path: str):
+def get_proxy(share_token: str, fp: dict):
+    proxy = common_utils.get_user_proxy(share_token)
+    proxy_url = proxy if proxy is not None else fp.pop("proxy_url", None)
+    return proxy_url
+
+
+async def content_generator_with_lock_release(r, share_token, history, lock_key=None):
+    conversation_id = None
+    model = None
+    chunk_count = 0
+    chunk_sent_count = 0  # 新增：记录发送到前端的数据块数量
+    finish_marker_received = False
+    start_time = time.time()
+    last_chunk_time = time.time()
+    username = redis_utils.get_username_by_token(share_token)
+    gpt_reset_every_day = redis_utils.hash_get('share_token_info:' + share_token, 'gpt_reset_every_day')
+
+    # 创建后台任务定期更新锁
+    async def extend_lock_lifetime():
+        try:
+            while True:
+                # 每15秒续期一次锁
+                if lock_key:
+                    try:
+                        lock_exists = redis_utils.exists(lock_key)
+                        if lock_exists:
+                            redis_utils.expire(lock_key, 60)
+                            logger.info(f"后台任务更新锁过期时间: {lock_key}")
+                    except Exception as e:
+                        logger.error(f"后台任务更新锁失败: {str(e)}")
+                await asyncio.sleep(15)
+        except asyncio.CancelledError:
+            logger.info(f"锁续期任务被取消: {lock_key}")
+            return
+    
+    # 启动后台任务
+    if lock_key:
+        lock_extend_task = asyncio.create_task(extend_lock_lifetime())
+    
     try:
-        # if ".js.map" in path:
-        #     raise HTTPException(status_code=405, detail="Not Al")
+        logger.info(f"开始流式处理，lock_key: {lock_key}, 开始时间: {datetime.now().isoformat()}")
+        
+        async for chunk in r.aiter_content():
+            current_time = time.time()
+            chunk_count += 1
+            time_since_last = current_time - last_chunk_time
+            
+            # 记录每个数据块的接收时间和间隔
+            chunk_size = len(chunk)
+            logger.info(f"接收到第 {chunk_count} 个数据块, 大小: {chunk_size}字节, 间隔: {time_since_last:.3f}秒, 时间: {datetime.now().isoformat()}")
+            last_chunk_time = current_time
+            
+            # 检查是否为流结束标记
+            try:
+                chunk_text = chunk.decode('utf-8', errors='ignore').strip()
+                if chunk_text == "data: [DONE]":
+                    finish_marker_received = True
+                    logger.info(f"收到流结束标记，总数据块: {chunk_count}, 已发送: {chunk_sent_count}, 总时间: {current_time - start_time:.3f}秒")
+                    # 收到结束标记立即释放锁
+                    if lock_key:
+                        redis_utils.delete(lock_key)
+                        logger.info(f"收到结束标记，立即释放锁: {lock_key}")
+                        lock_key = None  # 防止finally中重复释放
+            except Exception as e:
+                logger.error(f"解析流结束标记出错: {str(e)}")
+                
+            # 更智能的超时检测 - 不使用固定90秒，而是检测数据活动
+            if time_since_last > 20 and current_time - start_time > 30 and lock_key:
+                logger.warning(f"数据流20秒无活动，释放锁: {lock_key}, 总时间: {current_time - start_time:.3f}秒")
+                try:
+                    redis_utils.delete(lock_key)
+                    lock_key = None  # 防止finally中重复释放
+                except Exception as e:
+                    logger.error(f"释放锁失败: {str(e)}")
+                
+            # 发送一个保活信号，防止连接超时
+            if time_since_last > 10 and not finish_marker_received:
+                logger.info("发送保活信号")
+                # 降低保活信号间隔到10秒
+                yield b":\n\n"  # SSE注释作为保活信号
+                chunk_sent_count += 1
+                
+            # 正常处理数据...
+            try:
+                if history and (not conversation_id or not model):
+                    chat_chunk = chunk.decode('utf-8', errors='ignore')
+                    if chat_chunk.startswith("data: {"):
+                        if "\n\nevent: delta" in chat_chunk:
+                            index = chat_chunk.find("\n\nevent: delta")
+                            chunk_data = chat_chunk[6:index]
+                        elif "\n\ndata: {" in chat_chunk:
+                            index = chat_chunk.find("\n\ndata: {")
+                            chunk_data = chat_chunk[6:index]
+                        else:
+                            chunk_data = chat_chunk[6:]
+                        chunk_data = chunk_data.strip()
+                        if conversation_id is None:
+                            try:
+                                conversation_id = json.loads(chunk_data).get("conversation_id")
+                                if conversation_id is not None:
+                                    redis_utils.set_add('user_conversations:' + username, conversation_id)
+                                    logger.info(f"获取到conversation_id: {conversation_id}")
+                            except Exception as e:
+                                logger.error(f"解析conversation_id出错: {str(e)}")
+                        if model is None:
+                            try:
+                                chunk_json = json.loads(chunk_data)
+                                model = chunk_json.get("message", {}).get("metadata", {}).get("model_slug")
+                                if model is not None:
+                                    logger.info(f"获取到model: {model}")
+                                    model_usage = redis_utils.hash_get("usage:" + username, model)
+                                    real_usage = 0 if model_usage is None else int(model_usage)
+                                    if is_true(gpt_reset_every_day):
+                                        redis_utils.hash_set("usage:" + username, {model: real_usage + 1})
+                                    else:
+                                        # 计算到第二天0点的秒数
+                                        now = datetime.now()
+                                        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0,
+                                                                                     microsecond=0)
+                                        expire_seconds = int((tomorrow - now).total_seconds())
+                                        redis_utils.hash_set("usage:" + username, {model: real_usage + 1},
+                                                             expire_seconds=expire_seconds)
+                            except Exception as e:
+                                logger.error(f"解析model出错: {str(e)}")
+            except Exception as e:
+                logger.error(f"处理数据块出错: {str(e)}")
+
+            # 发送数据块给客户端
+            try:
+                logger.info(f"正在发送第 {chunk_count} 个数据块到前端")
+                yield chunk
+                chunk_sent_count += 1
+                logger.info(f"成功发送第 {chunk_count} 个数据块到前端")
+            except Exception as e:
+                logger.error(f"发送数据块到前端失败: {str(e)}")
+                # 如果发送失败，尝试释放锁
+                if lock_key:
+                    try:
+                        redis_utils.delete(lock_key)
+                        logger.info(f"发送失败，释放锁: {lock_key}")
+                        lock_key = None
+                    except:
+                        pass
+                raise  # 重新抛出异常让外层处理
+
+    except Exception as e:
+        logger.error(f"流式处理发生异常: {str(e)}")
+        if not finish_marker_received:
+            logger.info("发送强制结束标记")
+            try:
+                yield b"data: [DONE]\n\n"
+                chunk_sent_count += 1
+            except Exception as ex:
+                logger.error(f"发送结束标记失败: {str(ex)}")
+        raise
+    finally:
+        # 取消锁续期任务
+        if 'lock_extend_task' in locals():
+            lock_extend_task.cancel()
+            
+        # 确保锁被释放
+        if lock_key:
+            try:
+                redis_utils.delete(lock_key)
+                logger.info(f"finally块中释放锁: {lock_key}, 总时间: {time.time() - start_time:.3f}秒, 收到: {chunk_count}, 发送: {chunk_sent_count}")
+            except Exception as e:
+                logger.error(f"释放锁失败: {str(e)}")
+
+
+async def chatgpt_reverse_proxy(request: Request, path: str):
+    # if ".js.map" in path:
+    #     raise HTTPException(status_code=405, detail="Not Al")
+
+    try:
         share_token = common_utils.get_share_token(request)
         origin_host = request.url.netloc
         if request.url.is_secure:
@@ -230,12 +402,14 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
         headers.update({"authorization": f"Bearer {access_token}"})
 
         fp = get_fp(access_token).copy()
-        proxy = common_utils.get_user_proxy(share_token)
-        proxy_url = proxy if proxy is not None else fp.pop("proxy_url", None)
+        session_id = hashlib.md5(access_token.encode()).hexdigest()
+
+        proxy_url = get_proxy(share_token, fp)
         fp.pop("proxy_url", None)
         impersonate = fp.pop("impersonate", "safari15_3")
         user_agent = fp.get("user-agent")
         headers.update(fp)
+
         headers.update({
             "accept-language": "en-US,en;q=0.9",
             "host": base_url.replace("https://", "").replace("http://", ""),
@@ -257,6 +431,91 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
         history = True
         if path.endswith("backend-api/conversation") or path.endswith("backend-alt/conversation"):
             try:
+                # 获取用户名作为锁的唯一标识
+                access_token = common_utils.get_access_token(share_token)
+                lock_key = f"chat_lock:{access_token}"
+
+                # 尝试获取锁，设置过期时间为30秒，防止死锁
+                lock_acquired = redis_utils.set_nx(lock_key, "1", expire_seconds=60)
+
+                # 如果获取不到锁，说明有另一个对话请求正在处理中
+                if not lock_acquired:
+                    req_json = json.loads(data)
+
+                    async def concurrency_limit_message_generator():
+                        current_time = datetime.now(timezone.utc).isoformat(timespec='microseconds').replace(
+                            '+00:00', 'Z')
+                        conversation_id = req_json.get('conversation_id', str(uuid.uuid4()))
+                        parent_id = req_json.get('messages')[0].get('id')
+                        message_id = req_json.get('message_id', str(uuid.uuid4()))
+
+                        # 返回并发限制的消息
+                        first_message = {
+                            "conversation_id": conversation_id,
+                            "message": {
+                                "id": message_id,
+                                "author": {"role": "assistant"},
+                                "create_time": current_time,
+                                "content": {
+                                    "content_type": "text",
+                                    "parts": ["正在排队中...请稍等(60s)并尝试发起新的提问"]
+                                },
+                                "metadata": {
+                                    "citations": [],
+                                    "content_references": [],
+                                    "message_type": "next",
+                                    "metadata": {"model_slug": "gpt-4o"},
+                                    "default_model_slug": "gpt-4o",
+                                    "parent_id": parent_id,
+                                    "model_switcher_deny": []
+                                },
+                                "channel": None,
+                                "status": "finished_successfully",
+                                "end_turn": None,
+                                "weight": 1.0,
+                                "recipient": "all"
+                            },
+                            "parent_message_id": message_id
+                        }
+                        yield f"data: {json.dumps(first_message)}\n\n"
+
+                        final_message = {
+                            "conversation_id": conversation_id,
+                            "message": {
+                                "id": message_id,
+                                "author": {"role": "assistant"},
+                                "create_time": current_time,
+                                "content": {
+                                    "content_type": "text",
+                                    "parts": ["正在排队中...请稍等(60s)并尝试发起新的提问"]
+                                },
+                                "metadata": {
+                                    "citations": [],
+                                    "content_references": [],
+                                    "message_type": "next",
+                                    "metadata": {"model_slug": "gpt-4o"},
+                                    "default_model_slug": "gpt-4o",
+                                    "parent_id": parent_id,
+                                    "model_switcher_deny": []
+                                },
+                                "channel": None,
+                                "status": "finished_successfully",
+                                "end_turn": None,
+                                "weight": 1.0,
+                                "recipient": "all"
+                            },
+                            "parent_message_id": message_id
+                        }
+                        yield f"data: {json.dumps(final_message)}\n\n"
+                        yield "data: [DONE]\n\n"
+
+                    return StreamingResponse(
+                        content=concurrency_limit_message_generator(),
+                        media_type="text/event-stream",
+                        headers={"Content-Type": "text/event-stream"}
+                    )
+
+                # 处理请求继续...
                 req_json = json.loads(data)
                 model = req_json.get("model")
                 if model:
@@ -276,12 +535,15 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
 
                     # 检查是否达到限额
                     if limit != -1 and current_usage >= limit:
+                        # 释放锁，因为请求被限制
+                        redis_utils.delete(lock_key)
+
                         async def limit_message_generator():
                             current_time = datetime.now(timezone.utc).isoformat(timespec='microseconds').replace(
                                 '+00:00', 'Z')
-                            conversation_id = str(uuid.uuid4())
-                            parent_message_id = str(uuid.uuid4())
-                            message_id = str(uuid.uuid4())
+                            conversation_id = req_json.get('conversation_id', str(uuid.uuid4()))
+                            parent_id = req_json.get('messages')[0].get('id')
+                            message_id = req_json.get('message_id', str(uuid.uuid4()))
 
                             # 第一条消息，包含conversation_id等基本信息
                             first_message = {
@@ -292,15 +554,24 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
                                     "create_time": current_time,
                                     "content": {
                                         "content_type": "text",
-                                        "parts": [f"您已达到{model}模型的预设使用限额，请尝试使用其他模型"]
+                                        "parts": ["正在排队中...请稍等(60s)并尝试发起新的提问"]
                                     },
+                                    "metadata": {
+                                        "citations": [],
+                                        "content_references": [],
+                                        "message_type": "next",
+                                        "metadata": {"model_slug": "gpt-4o"},
+                                        "default_model_slug": "gpt-4o",
+                                        "parent_id": parent_id,
+                                        "model_switcher_deny": []
+                                    },
+                                    "channel": None,
                                     "status": "finished_successfully",
                                     "end_turn": None,
                                     "weight": 1.0,
-                                    "metadata": {"model_slug": model},
                                     "recipient": "all"
                                 },
-                                "parent_message_id": parent_message_id
+                                "parent_message_id": message_id
                             }
                             yield f"data: {json.dumps(first_message)}\n\n"
 
@@ -313,15 +584,24 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
                                     "create_time": current_time,
                                     "content": {
                                         "content_type": "text",
-                                        "parts": [f"您已达到{model}模型的预设使用限额，请尝试使用其他模型"]
+                                        "parts": ["正在排队中...请稍等(60s)并尝试发起新的提问"]
                                     },
+                                    "metadata": {
+                                        "citations": [],
+                                        "content_references": [],
+                                        "message_type": "next",
+                                        "metadata": {"model_slug": "gpt-4o"},
+                                        "default_model_slug": "gpt-4o",
+                                        "parent_id": parent_id,
+                                        "model_switcher_deny": []
+                                    },
+                                    "channel": None,
                                     "status": "finished_successfully",
-                                    "end_turn": True,
+                                    "end_turn": None,
                                     "weight": 1.0,
-                                    "metadata": {"model_slug": model},
                                     "recipient": "all"
                                 },
-                                "parent_message_id": parent_message_id
+                                "parent_message_id": message_id
                             }
                             yield f"data: {json.dumps(final_message)}\n\n"
                             yield "data: [DONE]\n\n"
@@ -334,7 +614,14 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
 
                         logger.info(f"用户 {username} 使用 {model} 模型,当前使用量: {current_usage}/{limit}")
             except Exception as e:
-                logger.error(f"检查模型使用限额失败: {str(e)}")
+                # 确保发生异常时释放锁
+                try:
+                    access_token = common_utils.get_access_token(share_token)
+                    lock_key = f"chat_lock:{access_token}"
+                    redis_utils.delete(lock_key)
+                except:
+                    pass
+                logger.error(f"处理对话请求时出错: {str(e)}")
                 if isinstance(e, HTTPException):
                     raise e
 
@@ -348,19 +635,35 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
                 req_json["history_and_training_disabled"] = True
                 data = json.dumps(req_json).encode("utf-8")
 
-
-        if sentinel_proxy_url_list and "backend-api/sentinel/chat-requirements" in path:
-            client = Client(proxy=random.choice(sentinel_proxy_url_list))
+        if "backend-api/sentinel/chat-requirements" in path and sentinel_proxy_url_list:
+            sentinel_proxy_url = random.choice(sentinel_proxy_url_list).replace("{}",
+                                                                                session_id) if sentinel_proxy_url_list else None
+            client = Client(proxy=sentinel_proxy_url)
         else:
+            proxy_url = proxy_url.replace("{}", session_id) if proxy_url else None
             client = Client(proxy=proxy_url, impersonate=impersonate)
         try:
             background = BackgroundTask(client.close)
+            # 记录是否需要在请求完成后释放锁
+            need_release_lock = False
+            lock_key = ""
+
+            # 获取锁信息以便后续释放
+            if path.endswith("backend-api/conversation") or path.endswith("backend-alt/conversation"):
+                access_token = common_utils.get_access_token(share_token)
+                lock_key = f"chat_lock:{access_token}"
+                need_release_lock = True
+
             if not path.endswith(".js"):
                 r = await client.request(request.method, f"{base_url}/{path}", params=params, headers=headers,
-                                     cookies=request_cookies, data=data, stream=True, allow_redirects=False)
+                                         cookies=request_cookies, data=data, stream=True, allow_redirects=False)
             else:
-                r = await client.request(request.method, f"{base_url}/{path}", params=params, data=data, stream=True, allow_redirects=False)
+                r = await client.request(request.method, f"{base_url}/{path}", params=params, data=data, stream=True,
+                                         allow_redirects=False)
             if r.status_code == 307 or r.status_code == 302 or r.status_code == 301:
+                # 处理重定向情况时释放锁
+                if need_release_lock:
+                    redis_utils.delete(lock_key)
                 return Response(status_code=307,
                                 headers={"Location": r.headers.get("Location")
                                 .replace("ab.chatgpt.com", origin_host)
@@ -373,18 +676,42 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
                 logger.info(f"Request UA: {user_agent}")
                 logger.info(f"Request impersonate: {impersonate}")
                 conv_key = r.cookies.get("conv_key", "")
-                response = StreamingResponse(content_generator(r, share_token, history),
-                                             media_type=r.headers.get("content-type", ""),
-                                             background=background)
+
+                # 创建自定义的内容生成器，以便在流结束时释放锁
+                if need_release_lock:
+                    generator = content_generator_with_lock_release(r, share_token, history, lock_key)
+                else:
+                    generator = content_generator(r, share_token, history)
+
+                response = StreamingResponse(
+                    content=generator,
+                    media_type="text/event-stream",
+                    headers={
+                        "Content-Type": "text/event-stream",
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no",  # 重要：禁用 Nginx 缓冲
+                        "Transfer-Encoding": "chunked"  # 显式使用分块传输
+                    }
+                )
                 response.set_cookie("conv_key", value=conv_key)
                 return response
-            elif 'image' in r.headers.get("content-type", "") or "audio" in r.headers.get("content-type", "") or "video" in r.headers.get("content-type", ""):
+            elif 'image' in r.headers.get("content-type", "") or "audio" in r.headers.get("content-type",
+                                                                                          "") or "video" in r.headers.get(
+                    "content-type", ""):
+                # 处理媒体内容时释放锁
+                if need_release_lock:
+                    redis_utils.delete(lock_key)
                 rheaders = dict(r.headers)
                 response = Response(content=await r.acontent(), headers=rheaders,
-                                        status_code=r.status_code, background=background)
+                                    status_code=r.status_code, background=background)
                 return response
             else:
-                if path.endswith("backend-api/conversation") or path.endswith("backend-alt/conversation") or "/register-websocket" in path:
+                # 处理其他响应时释放锁
+                if need_release_lock:
+                    redis_utils.delete(lock_key)
+                if path.endswith("backend-api/conversation") or path.endswith(
+                        "backend-alt/conversation") or "/register-websocket" in path:
                     response = Response(content=(await r.acontent()), media_type=r.headers.get("content-type"),
                                         status_code=r.status_code, background=background)
                 else:
@@ -394,7 +721,8 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
                                    .replace("https://ab.chatgpt.com", f"{petrol}://{origin_host}")
                                    .replace("https://cdn.oaistatic.com", f"{petrol}://{origin_host}")
                                    .replace("webrtc.chatgpt.com", voice_host if voice_host else "webrtc.chatgpt.com")
-                                   .replace("files.oaiusercontent.com", file_host if file_host else "files.oaiusercontent.com")
+                                   .replace("files.oaiusercontent.com",
+                                            file_host if file_host else "files.oaiusercontent.com")
                                    .replace("chatgpt.com/ces", f"{origin_host}/ces")
                                    )
                     else:
@@ -402,7 +730,8 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
                                    .replace("https://ab.chatgpt.com", f"{petrol}://{origin_host}")
                                    .replace("https://cdn.oaistatic.com", f"{petrol}://{origin_host}")
                                    .replace("webrtc.chatgpt.com", voice_host if voice_host else "webrtc.chatgpt.com")
-                                   .replace("files.oaiusercontent.com", file_host if file_host else "files.oaiusercontent.com")
+                                   .replace("files.oaiusercontent.com",
+                                            file_host if file_host else "files.oaiusercontent.com")
                                    .replace("web-sandbox.oaiusercontent.com", f"{origin_host}/sandbox")
                                    .replace("https://chatgpt.com", f"{petrol}://{origin_host}")
                                    .replace("chatgpt.com/ces", f"{origin_host}/ces")
@@ -424,9 +753,24 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
                                         status_code=r.status_code, background=background)
                 return response
         except Exception as e:
-            logger.error(e)
             await client.close()
+            # 确保在整个请求出错时也释放锁
+            if path.endswith("backend-api/conversation") or path.endswith("backend-alt/conversation"):
+                try:
+                    access_token = common_utils.get_access_token(share_token)
+                    lock_key = f"chat_lock:{access_token}"
+                    redis_utils.delete(lock_key)
+                except:
+                    pass
     except HTTPException as e:
         raise e
     except Exception as e:
+        # 在最外层异常中也尝试释放锁
+        try:
+            if path and (path.endswith("backend-api/conversation") or path.endswith("backend-alt/conversation")):
+                access_token = common_utils.get_access_token(share_token)
+                lock_key = f"chat_lock:{access_token}"
+                redis_utils.delete(lock_key)
+        except:
+            pass
         raise HTTPException(status_code=500, detail=str(e))

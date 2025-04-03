@@ -1,35 +1,20 @@
 {
-    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ik1UaEVOVUpHTkVNMVFURTRNMEZCTWpkQ05UZzVNRFUxUlRVd1FVSkRNRU13UmtGRVFrRXpSZyJ9.eyJzZXNzaW9uX2lkIjoiSlRFaEpwdVVDMXlKUHFEdjJwUDdQVHpfQXZVYndXQlIiLCJodHRwczovL2FwaS5vcGVuYWkuY29tL3Byb2ZpbGUiOnsiZW1haWwiOiJtYWlsMUB5ZWVsby5mdW4iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZX0sImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJwb2lkIjoib3JnLTNYSFZoa1M1UjJlVWhrTUc1NmdGVXZDUCIsInVzZXJfaWQiOiJ1c2VyLUd0aE5rc0U5ZFAxd3g1aEluYmdXelJ5QyJ9LCJpc3MiOiJodHRwczovL2F1dGgwLm9wZW5haS5jb20vIiwic3ViIjoiYXV0aDB8NjY2N2ZjZjViNTVmMTEyMGYyMTdmNjA5IiwiYXVkIjpbImh0dHBzOi8vYXBpLm9wZW5haS5jb20vdjEiLCJodHRwczovL29wZW5haS5vcGVuYWkuYXV0aDBhcHAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTc0MTg4ODgxNCwiZXhwIjoxNzQyNzUyODE0LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIG1vZGVsLnJlYWQgbW9kZWwucmVxdWVzdCBvcmdhbml6YXRpb24ucmVhZCBvcmdhbml6YXRpb24ud3JpdGUgb2ZmbGluZV9hY2Nlc3MiLCJhenAiOiJwZGxMSVgyWTcyTUlsMnJoTGhURTlWVjliTjkwNWtCaCJ9.pvguy23aew0p8zBmY4q6_4XrkTMlqjq7p54S27-I_mLYqhX-8T8qXKZX5uYFfxl1Ud5tCYD2Aqu--xXLV0vSkRa1Xh25SPafETcuRxBkphq5eJ5MByBFjTXBZnzp7-uCRF-IUipd5IrESFMX_mkcD7rwqQwlXfnAdzadH2TvWNnLoBdVlhXHNDw2w4alHLI0Tr2qVkQtBpECdT6UzJW1YPLkQduoHp7Kw-buqYdVRhU4qP_3WQy5ar0pXy4KSUCSl-KdGPjzJxwOHNwQlVaNNoKIHMvUmQJeW7lOMebBvRiF1at-ozZiyw0jQ4HFwwXKNkxoLGXuW3vcFXey6tz8SQ": {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.22 Safari/537.36",
-        "impersonate": "chrome119",
-        "proxy_url": "http://qrbqkrie:iv9r187p34xo@69.30.76.99:6495",
-        "oai-device-id": "670a013d-1bd4-4cfb-91df-e6d21b181a26",
-        "sec-ch-ua-platform": "\"Windows\"",
-        "sec-ch-ua": "\"Not A(Brand\";v=\"99\", \"Chromium\";v=\"125\", \"Google Chrome\";v=\"125\"",
-        "sec-ch-ua-mobile": "?0"
-    },
-    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ik1UaEVOVUpHTkVNMVFURTRNMEZCTWpkQ05UZzVNRFUxUlRVd1FVSkRNRU13UmtGRVFrRXpSZyJ9.eyJzZXNzaW9uX2lkIjoiTUhLX1RDbkREOXBlbHJoem85ZUxUcjUxWkV5Ynh6aXkiLCJodHRwczovL2FwaS5vcGVuYWkuY29tL3Byb2ZpbGUiOnsiZW1haWwiOiJtYWlsM0B5ZWVsby5mdW4iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZX0sImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJwb2lkIjoib3JnLUFGYnVXUzJ1WTdSclg2TjN3WjNNR1JHayIsInVzZXJfaWQiOiJ1c2VyLWlNWmxDUUg3MGUxNDlBdFFYeEZLQmpUYSJ9LCJpc3MiOiJodHRwczovL2F1dGgwLm9wZW5haS5jb20vIiwic3ViIjoiYXV0aDB8NjViMzYwMjVkN2M4OGI0MDM1MTNiYjJkIiwiYXVkIjpbImh0dHBzOi8vYXBpLm9wZW5haS5jb20vdjEiLCJodHRwczovL29wZW5haS5vcGVuYWkuYXV0aDBhcHAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTc0MTg0MTQ3MCwiZXhwIjoxNzQyNzA1NDcwLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIG1vZGVsLnJlYWQgbW9kZWwucmVxdWVzdCBvcmdhbml6YXRpb24ucmVhZCBvcmdhbml6YXRpb24ud3JpdGUgb2ZmbGluZV9hY2Nlc3MiLCJhenAiOiJwZGxMSVgyWTcyTUlsMnJoTGhURTlWVjliTjkwNWtCaCJ9.wQE5fN-M_YzWa3D1zpyZYo15fhMABP3lHQjai8xcchGqk_ViWNjfMqOQm9coFKM7TSMRsTUbWLWB-WZga7ycftpjfjIx3gcW4IuNHRtlcqQ3RL2WWtYzK5AcjwDj-JD8A7iO7bUkAZUeOQOnP8Ye9Z4ytU9-vVUhqOYJcSRbIw9ZgIh_52Yq0oU3Z6vYS0HaYzWh_gvFja1N19XvTXQSxUpAWVUIwgPqrkwcWFmz9jTJGldIfL3Rb4iroBe0JLvR5EH6dQc6msrPPeAwQajB0WZGk-60TxVk_wyeC3cY1WP8C5zcmj7i3CCPR6DocO5sc5V6XE4G-nLKxFbpFT4yMg": {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.2478.53 Safari/537.36 Edg/124.0.2478.53",
-        "impersonate": "chrome120",
-        "proxy_url": "http://mysh.yeelo.fun:20171",
-        "oai-device-id": "78951fc3-6688-412c-959e-0c945860e919",
-        "sec-ch-ua-platform": "\"Windows\"",
-        "sec-ch-ua": "\"Not A(Brand\";v=\"99\", \"Chromium\";v=\"124\", \"Microsoft Edge\";v=\"124\"",
-        "sec-ch-ua-mobile": "?0"
-    },
-    "http://127.0.0.1:7890": {
-        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
-        "impersonate": "chrome100",
-        "proxy_url": "http://127.0.0.1:7890",
-        "oai-device-id": "09518e9a-12f8-4ad3-87aa-daf0a1a8372a"
-    },
     "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ik1UaEVOVUpHTkVNMVFURTRNMEZCTWpkQ05UZzVNRFUxUlRVd1FVSkRNRU13UmtGRVFrRXpSZyJ9.eyJzZXNzaW9uX2lkIjoiTUhLX1RDbkREOXBlbHJoem85ZUxUcjUxWkV5Ynh6aXkiLCJodHRwczovL2FwaS5vcGVuYWkuY29tL3Byb2ZpbGUiOnsiZW1haWwiOiI3NTIwNTEwODVAcXEuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWV9LCJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsicG9pZCI6Im9yZy1VSkx6S1F5cEx1cTNneGJLenJaWG55eHMiLCJ1c2VyX2lkIjoidXNlci1FQVBqTElsNUhWandheUhZZG1IbjdUMFQifSwiaXNzIjoiaHR0cHM6Ly9hdXRoMC5vcGVuYWkuY29tLyIsInN1YiI6ImF1dGgwfDYzOTJhOTQ5ZjM2N2I4ZjQ2MTQ2NWRlNCIsImF1ZCI6WyJodHRwczovL2FwaS5vcGVuYWkuY29tL3YxIiwiaHR0cHM6Ly9vcGVuYWkub3BlbmFpLmF1dGgwYXBwLmNvbS91c2VyaW5mbyJdLCJpYXQiOjE3NDIxNDgwMDQsImV4cCI6MTc0MzAxMjAwNCwic2NvcGUiOiJvcGVuaWQgcHJvZmlsZSBlbWFpbCBtb2RlbC5yZWFkIG1vZGVsLnJlcXVlc3Qgb3JnYW5pemF0aW9uLnJlYWQgb3JnYW5pemF0aW9uLndyaXRlIG9mZmxpbmVfYWNjZXNzIiwiYXpwIjoicGRsTElYMlk3Mk1JbDJyaExoVEU5VlY5Yk45MDVrQmgifQ.wq1RE0dv1OwET4whDr-UsGfgH-srAM1_NfgE1Ra2P7cJt92Gy0ESRaX3TFMBhL2o9wuEhMy4i9McE7BwwRCcnbemaudSXHG5Gfi0YDdnLL_4PO1Us4BGzIqo1PFe1wxA6VppDpzZk5TnJGEcEIqy-vWc1Iy_UjfyGIGwNCfbecC1bT68WqXhEtLAn60YABXRX9VZImzLV87iDhy8STprgPZWiVI_4KUuIbnty-aT-UE-Eay85B1Me7P-_g0zMRprA0y8z6Qq9zYKlSe46u5vY3MErL0uicCc7u2_R6vH9tQY7-DyLHlaLfzBRy-0S7ha4GhTAgZXezxNlGOmzKBsxw": {
-        "user-agent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.6668.179 Safari/537.36",
-        "impersonate": "chrome100",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.191 Safari/537.36",
+        "impersonate": "chrome104",
         "proxy_url": "http://127.0.0.1:7890",
-        "oai-device-id": "2966cd9f-5eea-4f37-a80a-50daebbbb7e2",
-        "sec-ch-ua-platform": "\"Windows\"",
-        "sec-ch-ua": "\"Not A(Brand\";v=\"99\", \"Chromium\";v=\"129\", \"Google Chrome\";v=\"129\"",
+        "oai-device-id": "ee6cd36a-e34a-4512-a5f2-8e7420a8f241",
+        "sec-ch-ua-platform": "\"macOS\"",
+        "sec-ch-ua": "\"Not A(Brand\";v=\"99\", \"Chromium\";v=\"128\", \"Google Chrome\";v=\"128\"",
+        "sec-ch-ua-mobile": "?0"
+    },
+    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ik1UaEVOVUpHTkVNMVFURTRNMEZCTWpkQ05UZzVNRFUxUlRVd1FVSkRNRU13UmtGRVFrRXpSZyJ9.eyJzZXNzaW9uX2lkIjoiSHpnejBrSHpaT19lXzlNWERnVFYxTUVHb1RNUjhlb0UiLCJodHRwczovL2FwaS5vcGVuYWkuY29tL3Byb2ZpbGUiOnsiZW1haWwiOiJtYWlsMkB5ZWVsby5mdW4iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZX0sImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJwb2lkIjoib3JnLUZHUDRHTkRES3pydFZzNEVPVllDajFtTSIsInVzZXJfaWQiOiJ1c2VyLXNTTDVJM1AzRG9oTVRPTVFUYm85cEttNiJ9LCJpc3MiOiJodHRwczovL2F1dGgwLm9wZW5haS5jb20vIiwic3ViIjoiYXV0aDB8NjViMzU3MDBkN2M4OGI0MDM1MTNiNjNjIiwiYXVkIjpbImh0dHBzOi8vYXBpLm9wZW5haS5jb20vdjEiLCJodHRwczovL29wZW5haS5vcGVuYWkuYXV0aDBhcHAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTc0MzUzMDUwMSwiZXhwIjoxNzQ0Mzk0NTAxLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIG1vZGVsLnJlYWQgbW9kZWwucmVxdWVzdCBvcmdhbml6YXRpb24ucmVhZCBvcmdhbml6YXRpb24ud3JpdGUgb2ZmbGluZV9hY2Nlc3MiLCJhenAiOiJwZGxMSVgyWTcyTUlsMnJoTGhURTlWVjliTjkwNWtCaCJ9.wa7_L6J2fR8cqU3377VgS5Mhoa1tH1ECOA25Fhb-xDF8TEG1A-cUdihvRUExwZ63tHtCEx6Uz4aiby33c0RLagaOAVvneB3or9oRDtfrSlPBQl9VBLR3r2X5HMPydxoSMLVYpNbS1-vq7jTaEm0t_nxsjkNk-jS53mk-QITMhYMEqDgZGVRAieSifhkWjTyXg5EbPMAWwhWKYkEPOrbdm3U9By2kfVhyKQVNjJvpDXuTAnQ1-DfdDKTQuMPhBB6py4EsjF4YMstALTd9druVVn5f7O1XzK498_UzymueEJTF9RIHtNBUuWtP7TJ1enx44ByQIyRZMaoiYZDMio8Jyw": {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.2849.90 Safari/537.36 Edg/130.0.2849.90",
+        "impersonate": "chrome104",
+        "proxy_url": "http://qrbqkrie:iv9r187p34xo@69.30.76.99:6495",
+        "oai-device-id": "4ba97512-66a6-4495-963e-873054be0e6b",
+        "sec-ch-ua-platform": "\"macOS\"",
+        "sec-ch-ua": "\"Not A(Brand\";v=\"99\", \"Chromium\";v=\"130\", \"Microsoft Edge\";v=\"130\"",
         "sec-ch-ua-mobile": "?0"
     }
 }

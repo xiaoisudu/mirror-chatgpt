@@ -41,15 +41,22 @@ async def chatgpt_html(request: Request):
 
     if request.cookies.get("oai-locale"):
         set_value_for_key_list(user_chatgpt_context_1, "locale", request.cookies.get("oai-locale"))
+    else:
+        accept_language = request.headers.get("accept-language")
+        if accept_language:
+            set_value_for_key_list(user_chatgpt_context_1, "locale", accept_language.split(",")[0])
 
     user_chatgpt_context_1 = json.dumps(user_chatgpt_context_1, separators=(',', ':'), ensure_ascii=False)
     user_chatgpt_context_2 = json.dumps(user_chatgpt_context_2, separators=(',', ':'), ensure_ascii=False)
 
-    escaped_context_1 = user_chatgpt_context_1.replace("\\", "\\\\")
-    escaped_context_2 = user_chatgpt_context_2.replace("\\", "\\\\")
+    escaped_context_1 = user_chatgpt_context_1.replace("\\", "\\\\").replace('"', '\\"')
+    escaped_context_2 = user_chatgpt_context_2.replace("\\", "\\\\").replace('"', '\\"')
 
-    escaped_context_1 = escaped_context_1.replace('"', '\\"')
-    escaped_context_2 = escaped_context_2.replace('"', '\\"')
+    clear_localstorage_script = """
+    <script>
+        localStorage.clear();
+    </script>
+    """
     # share token
     if share_token.startswith("fk-"):
         access_token = common_utils.get_access_token(share_token)
@@ -88,7 +95,8 @@ async def chatgpt_html(request: Request):
         response = templates.TemplateResponse("chatgpt.html", {
             "request": request,
             "react_chatgpt_context_1": escaped_context_1,
-            "react_chatgpt_context_2": escaped_context_2
+            "react_chatgpt_context_2": escaped_context_2,
+            "clear_localstorage_script": clear_localstorage_script
         })
         if not use_at:
             response.set_cookie("share_token", value=share_token, expires="tomorrow 08:00:00 GMT")
@@ -106,7 +114,7 @@ def api_free_login(request: Request):
 
     # 不为空，获取at并校验
     if share_token is not None:
-        access_token = common_utils.get_share_token(share_token)
+        access_token = common_utils.get_access_token(share_token)
         # at为空，返回
         if access_token is None:
             raise HTTPException(status_code=401, detail="Error RefreshToken")
