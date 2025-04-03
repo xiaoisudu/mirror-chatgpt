@@ -1,0 +1,12 @@
+version: '3'
+services:
+  myapi:
+    environment:
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      SSL_ENABLED: true
+      PROXY_URL: http://username:password@ip:port
+    ports:
+      - "5005:5005"
+    restart: always
+    image: kylsky/mirror-preview:latest
