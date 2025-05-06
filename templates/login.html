@@ -349,7 +349,9 @@
                 card.style.transform = 'scale(0.98)';
                 
                 setTimeout(() => {
-                    window.location.href = '/?share_token=' + input.value;
+                    // 添加 cookie
+                    document.cookie += 'share_token=' + input.value
+                    window.location.href = '/';
                 }, 300);
             } else {
                 input.style.transform = 'translateX(0)';

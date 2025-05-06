@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import random
 import time
 import uuid
@@ -211,7 +212,9 @@ async def content_generator(r, share_token, history=True, request: Request = Non
 
 def get_proxy(share_token: str, fp: dict):
     proxy = common_utils.get_user_proxy(share_token)
-    proxy_url = proxy if proxy is not None else fp.pop("proxy_url", None)
+    proxy if proxy is not None else fp.pop("proxy_url", None)
+    proxy_url = proxy if proxy is not None else os.getenv('PROXY_URL', '')
+    logger.info("用户代理地址："+ proxy_url)
     return proxy_url
 
 
@@ -440,7 +443,9 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
         if "sandbox" in path:
             base_url = "https://web-sandbox.oaiusercontent.com"
             path = path.replace("sandbox/", "")
-        access_token = request.headers.get('authorization') if 'authorization' in request.headers else common_utils.get_access_token(share_token)
+        access_token = request.headers.get('authorization') \
+            if 'authorization' in request.headers and request.headers.get("authorization") != "Bearer" \
+            else common_utils.get_access_token(share_token)
         headers.update({"authorization": f"Bearer {access_token}"})
 
         fp = get_fp(access_token).copy()

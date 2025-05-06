@@ -130,6 +130,7 @@ async def get_conversations(request: Request):
     conversation_list_json = json.loads(conversation_list_str)
 
     # 获取当前用户
+
     username = redis_utils.get_username(request)
     conversation_isolation = redis_utils.hash_get("share_token_info:" + share_token, 'conversation_isolation')
 

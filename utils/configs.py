@@ -72,7 +72,7 @@ browser_tuple = ast.literal_eval(browser_tuple_str)
 platform_tuple = ast.literal_eval(platform_tuple_str)
 
 enable_gateway = is_true(os.getenv('ENABLE_GATEWAY', True))
-auto_seed = is_true(os.getenv('AUTO_SEED', True))
+auto_seed = is_true(os.getenv('AUTO_SEED', False))
 force_no_history = is_true(os.getenv('FORCE_NO_HISTORY', False))
 no_sentinel = is_true(os.getenv('NO_SENTINEL', False))
 
