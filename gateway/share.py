@@ -2,6 +2,7 @@ import hashlib
 import json
 import random
 import time
+import traceback
 
 import jwt
 from fastapi import Request, HTTPException, Security
@@ -127,8 +128,7 @@ async def chatgpt_account_check(access_token):
     client = Client(proxy=random.choice(proxy_url_list) if proxy_url_list else None)
     try:
         host_url = random.choice(chatgpt_base_url_list) if chatgpt_base_url_list else "https://chatgpt.com"
-        req_token = await get_real_req_token(access_token)
-        access_token = await verify_token(req_token)
+        req_token = access_token
         fp = get_fp(req_token).copy()
         proxy_url = fp.pop("proxy_url", None)
         impersonate = fp.pop("impersonate", "safari15_3")
@@ -178,7 +178,11 @@ async def chatgpt_account_check(access_token):
 
         return auth_info
     except Exception as e:
+        # 打印完整异常堆栈
         logger.error(f"chatgpt_account_check: {e}")
+        logger.error(traceback.format_exc())
+
+
         return {}
     finally:
         await client.close()
@@ -218,7 +222,7 @@ async def refresh(request: Request):
 
     auth_info.update(form_data)
 
-    access_token = auth_info.get("access_token", auth_info.get("accessToken", ""))
+    access_token = auth_info.get("access_token", "")
     refresh_token = auth_info.get("refresh_token", "")
 
     if not refresh_token and not access_token:
