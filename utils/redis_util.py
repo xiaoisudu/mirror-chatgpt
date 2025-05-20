@@ -408,12 +408,12 @@ class RedisUtils:
 
     def get_username(self, request: Request):
         share_token = request.cookies.get("share_token", "")
-        username = self.hash_get("share_token_info:" + share_token, 'username') if share_token is not None else ''
+        username = self.hash_get("share_token_info:" + share_token, 'user_name') if share_token is not None else ''
         username = share_token if username is None or username == '' else username
         return username
 
     def get_username_by_token(self, share_token: str):
-        username = self.hash_get("share_token_info:" + share_token, 'username') if share_token is not None else ''
+        username = self.hash_get("share_token_info:" + share_token, 'user_name') if share_token is not None else ''
         username = share_token if username is None or username == '' else username
         return username
 

@@ -607,7 +607,7 @@ async def get_usage(share_token: str):
     """获取用户的模型使用量"""
     try:
         # 从redis获取用户名
-        name_from_redis = redis_utils.hash_get('share_token_info:' + share_token, 'username')
+        name_from_redis = redis_utils.hash_get('share_token_info:' + share_token, 'user_name')
         username = share_token if name_from_redis is None else name_from_redis
 
         # 获取该用户的所有模型使用量
