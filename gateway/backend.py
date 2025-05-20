@@ -131,7 +131,6 @@ async def get_conversations(request: Request):
 
     # 获取当前用户
 
-    username = redis_utils.get_username(request)
     conversation_isolation = redis_utils.hash_get("share_token_info:" + share_token, 'conversation_isolation')
 
     if conversation_isolation is not None and not is_true(str(conversation_isolation)):
@@ -140,6 +139,7 @@ async def get_conversations(request: Request):
             media_type="application/json"
         )
     # 获取对话列表
+    username = redis_utils.get_username(request)
     conversations = redis_utils.set_members('user_conversations:' + (share_token if username is None else username))
     if conversations is None:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -182,6 +182,7 @@ async def update_conversation(request: Request, conversation_id: str):
 @app.patch("/backend-api/conversation/{conversation_id}")
 async def patch_conversation(request: Request, conversation_id: str):
     share_token = common_utils.get_share_token(request)
+    username = redis_utils.get_username(share_token)
     conversation_isolation = redis_utils.hash_get("share_token_info:" + share_token, 'conversation_isolation')
     if conversation_isolation is not None and is_true(conversation_isolation):
         # 获取当前用户
