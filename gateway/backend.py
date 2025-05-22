@@ -182,7 +182,6 @@ async def update_conversation(request: Request, conversation_id: str):
 @app.patch("/backend-api/conversation/{conversation_id}")
 async def patch_conversation(request: Request, conversation_id: str):
     share_token = common_utils.get_share_token(request)
-    username = redis_utils.get_username(share_token)
     conversation_isolation = redis_utils.hash_get("share_token_info:" + share_token, 'conversation_isolation')
     if conversation_isolation is not None and is_true(conversation_isolation):
         # 获取当前用户

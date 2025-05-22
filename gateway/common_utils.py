@@ -3,6 +3,8 @@ import logging
 from utils.configs import redis_utils
 
 def get_access_token(share_token):
+    if not share_token:
+        return None
     return redis_utils.hash_get('share_token_info:' + share_token, 'access_token')
 
 def get_share_token(request):
