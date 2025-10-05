@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from utils.Logger import logger
 from utils.redis_util import RedisUtils
 
-load_dotenv(encoding="ascii")
+load_dotenv(encoding="utf-8")
 
 
 def is_true(x):
